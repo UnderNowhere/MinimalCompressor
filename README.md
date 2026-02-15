@@ -1,5 +1,11 @@
-# MinimalCompressor
+# DocPress (no name really found from now)
 A minimalist GUI cross plateform to compress documents using Ghostscript in Rust with Iced v0.14.
+
+### Warning
+
+You must have ghostscript installed before compressing a file.
+
+### About
 
 This project is mainly build for my personnal use and to learn Rust (+Iced). 
 
@@ -9,15 +15,17 @@ This project is mainly build for my personnal use and to learn Rust (+Iced).
 
 #### Code
 
- - [ ] Split file and responsability into different one.
+ - [x] Split file and responsability into different one.
  - [ ] Handling Ghostscript not found or any error status.
  - [ ] Function splitting.
  - [ ] Improve the indexing logic on async work...
  - [ ] Write test for a more robust code.
  - [ ] Handling file rewrite.
+ - [ ] Don't import twice documents
+ - [ ] One file drag and drop (single file only maybe a batch also) mode (will be default)
 
 #### UI 
 
- - [ ] Ability to see the size of the document compressed.
+ - [x] Ability to see the size of the document compressed.
  - [ ] Drag and drop features.
  - [ ] UI, Simply build a beautifull and rich UI.
