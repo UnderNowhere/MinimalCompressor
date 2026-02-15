@@ -2,8 +2,11 @@
 // This version is really just to test iced and rust and understand
 //  all I need to properly build the app, I know it's quite ugly...
 
+use std::ffi::OsStr;
 use std::{fs, fmt};
 use std::path::PathBuf;
+
+use tokio::process::Command;
 
 use iced::widget::{button, column, progress_bar, row, scrollable, space, text, pick_list, Column};
 use iced::Alignment::Center;
@@ -13,23 +16,25 @@ use rfd::AsyncFileDialog;
 #[derive(Debug, Clone)]
 struct FileEntry {
     path:PathBuf,
-    size:u64,
+    size:u64,           // TODO
     compressed:bool,
 }
 
-// preset either chose a quality preset or chose a size
-#[derive(Debug, Clone, PartialEq)]
+/// All available quality presets.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Quality {
-    Low,        // 25%
-    Middle,     // 50%
-    High,       // 75%
+    Low,        // Screen
+    Middle,     // Ebook
+    Good,       // Printer
+    High,       // Prepress
 }
 
 impl Quality {
-    /// A list with all the defined themes.
+    /// All available quality presets.
     pub const ALL: &'static [Self] = &[
         Self::Low,
         Self::Middle,
+        Self::Good,
         Self::High,
     ];
 }
@@ -39,7 +44,19 @@ impl fmt::Display for Quality {
         match self {
             Quality::Low => write!(f, "Low"),
             Quality::Middle => write!(f, "Middle"),
+            Quality::Good => write!(f, "Good"),
             Quality::High => write!(f, "High"),
+        }
+    }
+}
+
+impl Quality {
+    fn as_gs_pdfsettings(&self) -> String {
+        match self {
+            Quality::Low => String::from("screen"),
+            Quality::Middle => String::from("ebook"),
+            Quality::Good => String::from("printer"),
+            Quality::High => String::from("prepress"),
         }
     }
 }
@@ -82,9 +99,38 @@ enum Message {
 }
 
 // ─── Initial Fake compressor worker ───
-async fn compress_doc(_path:PathBuf, index:usize) -> usize {
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    index
+// note: Very dangerous returns TODO chose a Map struct (file with an id)
+// to avoid index deletion during the working async task... 
+async fn compress_pdf(path: PathBuf, index: usize, quality_parm: String, output_path: PathBuf) -> usize {
+    // TODO proper conversion and more robust. should be an exteranl utils function... (right now ugly)
+    // TODO think about the given type... does PathBuf is usefull ? 
+    let output_file = output_path.join(
+    format!(
+            "{}_{}.pdf",
+            path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown"),
+            quality_parm
+        )
+    );
+
+    let mut cmd = Command::new("gs");
+    cmd.arg("-sDEVICE=pdfwrite")
+        .arg("-dCompatibilityLevel=1.4")
+        .arg(format!("-dPDFSETTINGS=/{}", quality_parm))
+        .arg("-dNOPAUSE")
+        .arg("-dQUIET")
+        .arg("-dBATCH")
+        .arg(format!("-sOutputFile={}", output_file.display()))
+        .arg(&path);
+
+    println!("Wrinting file with compression quality ({}) at: {}", quality_parm, output_file.display());
+
+    let output = cmd.output().await;
+    
+    println!("Compression status: {:?}", output.map(|f| f.status));
+
+    index   // to keep track of which one has been converted
 }
 
 async fn select_output_folder() -> PathBuf {
@@ -167,7 +213,11 @@ fn update(app: &mut App, message:Message) -> Task<Message> {
             app.running = true;
             if let Some(file) = app.files.first() {
                 let path = file.path.clone();
-                Task::perform(compress_doc(path, 0), Message::FileCompressed)
+                Task::perform(compress_pdf(path, 
+                                            0, 
+                                            app.quality.as_gs_pdfsettings(), 
+                                            app.output_folder.clone()), 
+                                        Message::FileCompressed)
             } else {
                 Task::none()
             }
@@ -179,7 +229,11 @@ fn update(app: &mut App, message:Message) -> Task<Message> {
             let next = index + 1;
             if next < app.files.len() {
                 let path = app.files[next].path.clone();
-                Task::perform(compress_doc(path, next), Message::FileCompressed)
+                Task::perform(compress_pdf(path, 
+                                            next, 
+                                            app.quality.as_gs_pdfsettings(), 
+                                            app.output_folder.clone()), 
+                                            Message::FileCompressed)
             } else {
                 app.running = false;
                 Task::none()
@@ -192,8 +246,8 @@ fn update(app: &mut App, message:Message) -> Task<Message> {
 fn view(app: &App) -> Element<'_, Message> {
     let header = row![
         text("DocPress").size(25),
+        pick_list(Theme::ALL, Some(&app.theme), Message::SelectTheme),
         space().width(Fill),
-        // pick_list(Theme::ALL, Some(&app.theme), Message::SelectTheme),
         pick_list(Quality::ALL, Some(&app.quality), Message::SelectQuality),
 
         // TODO add a slider. to select the output size...
@@ -243,7 +297,7 @@ fn view(app: &App) -> Element<'_, Message> {
 
     let footer: Element<Message> = row![
         row![
-            progress_bar(0.0..=100.0, (files_compressed / app.files.len() as f32) * 100.0).length(Fill),
+            progress_bar(0.0..=100.0, if app.files.is_empty() { 0.0 } else { (files_compressed / app.files.len() as f32) * 100.0 }).length(Fill),
         ]
         .padding(Padding::ZERO.right(25))
         ,
