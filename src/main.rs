@@ -8,6 +8,7 @@ use std::os::fd::AsFd;
 use std::{fmt, fs};
 use std::path::PathBuf;
 
+use iced::wgpu::naga::back;
 use iced::widget::{button, column, progress_bar, row, scrollable, space, text, pick_list, container, Column};
 use iced::Alignment::Center;
 use iced::{Element, Fill, Padding, Task, Theme, Color};
@@ -179,32 +180,64 @@ impl App {
         }
     }
 
-    // ─── View... less fun ───
-    fn view(&self) -> Element<'_, Message> {
-        let header = row![
-            text("DocPress").size(25),
-            pick_list(Theme::ALL, Some(&self.theme), Message::SelectTheme),
-            space().width(Fill),
-            pick_list(Quality::ALL, Some(&self.quality), Message::SelectQuality),
+    fn view_header(&self) -> Element<'_, Message> {
+        let app_title = text("DocPress").size(25);
+        let theme_list = pick_list(Theme::ALL, Some(&self.theme), Message::SelectTheme);
+        let quality_list = pick_list(Quality::ALL, Some(&self.quality), Message::SelectQuality);
+        let mangae_files_btn = if self.running {
+            row![
+                button("Add documents"), 
+                button("Select Output Folder"),
+            ]
+        } else {
+            row![
+                button("Add documents").on_press(Message::OpenDialog),
+                button("Select Output Folder").on_press(Message::SelectOutputFolder),
+            ]
+        }.spacing(25);
 
+
+        row![
+            app_title,
+            theme_list,
+            space().width(Fill),
+            quality_list,
+            mangae_files_btn,
             // TODO add a slider. to select the output size...
             // slider(0..=50, app.compress_size, Message::SetSize),
-
-            if self.running {
-                button("Add documents")
-            } else {
-                button("Add documents").on_press(Message::OpenDialog)
-            },
-            if self.running {
-                button("Select Output Folder")
-            } else {
-                button("Select Output Folder").on_press(Message::SelectOutputFolder)
-            },
+            
         ]
         .spacing(25)
         .align_y(Center)
         .padding(Padding::ZERO.bottom(25))
-        ;
+        .into()
+    }
+
+    fn view_footer(&self, files_compressed:f32) -> Element<'_, Message> {
+
+        let progress_ratio = if self.files.is_empty() { 0.0 } else { (files_compressed / self.files.len() as f32) * 100.0 };
+
+        let progress_bar = progress_bar(0.0..=100.0, if self.files.is_empty() { 0.0 } else { progress_ratio }).length(Fill);
+
+        let can_compress = self.running || self.files.is_empty() || self.files.iter().all(|f| f.compressed) || !self.output_folder.is_dir();
+
+        let compress_btn = if can_compress {button("Compress")} else {button("Compress").on_press(Message::Start)};
+
+        row![
+            row![
+                progress_bar,
+            ]
+            .padding(Padding::ZERO.right(25))
+            ,
+            compress_btn,
+        ]
+        .align_y(Center)
+        .padding(Padding::ZERO.top(25))
+        .into()
+    }
+
+    // ─── View... less fun ───
+    fn view(&self) -> Element<'_, Message> {
 
         let files_compressed = self.files.iter().filter(|f| f.compressed).count() as f32;
 
@@ -214,27 +247,10 @@ impl App {
 
         let files_list = Column::with_children(vec_files);
 
-        let footer: Element<Message> = row![
-            row![
-                progress_bar(0.0..=100.0, if self.files.is_empty() { 0.0 } else { (files_compressed / self.files.len() as f32) * 100.0 }).length(Fill),
-            ]
-            .padding(Padding::ZERO.right(25))
-            ,
-            // space().width(Fill),
-            if self.running || self.files.is_empty() || self.files.iter().all(|f| f.compressed) || !self.output_folder.is_dir() {
-                button("Compress")
-            } else {
-                button("Compress").on_press(Message::Start)
-            }
-        ]
-        .align_y(Center)
-        .padding(Padding::ZERO.top(25))
-        .into();
-
         column![
-            header,
+            self.view_header(),
             scrollable(files_list).height(Fill),
-            footer,
+            self.view_footer(files_compressed),
         ]
         .padding(25)
         .into()
@@ -243,28 +259,33 @@ impl App {
 
 impl utils::FileEntry {
     fn view(&self, index: usize, running: bool) -> Element<'_, Message> {
-        row![
-            text(self.path.file_name().unwrap().display().to_string()),
-            text(utils::format_size(self.size)).style(text::secondary),
-            space().width(Fill),
-            
-            if self.compressed {
-                row![
-                    text(utils::format_size(self.compressed_size)).style(text::success),
-                    button("✓"),
-                ].align_y(Center).spacing(25)
-            } else {
-                if running {
-                    row![button("❌"),].align_y(Center)
+        let content = container(row![
+                text(self.path.file_name().unwrap().display().to_string()),
+                text(utils::format_size(self.size)).style(text::base),
+                space().width(Fill),
+                
+                if self.compressed {
+                    row![
+                        text(utils::format_size(self.compressed_size)).style(text::success),
+                        button("✓"),
+                    ].align_y(Center).spacing(25)
                 } else {
-                    row![button("❌").on_press(Message::RemoveFile(index)),].align_y(Center)
+                    if running {
+                        row![button("❌"),].align_y(Center)
+                    } else {
+                        row![button("❌").on_press(Message::RemoveFile(index)),].align_y(Center)
+                    }
                 }
-            }
-        ]
-        .spacing(10)
-        .align_y(Center)
-        .padding(Padding::ZERO.top(10).bottom(10))
-        .into()
+            ]
+            .spacing(10)
+            .align_y(Center)
+            .padding(10)
+        )
+        .style(container::secondary);
+
+        container(content)
+            .padding(Padding::ZERO.top(10).bottom(10))
+            .into()
     }
 }
 
