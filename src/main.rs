@@ -281,7 +281,9 @@ impl utils::FileEntry {
             .align_y(Center)
             .padding(10)
         )
-        .style(container::secondary);
+        .style(|bck_color| {
+            let bck_color = 
+        });
 
         container(content)
             .padding(Padding::ZERO.top(10).bottom(10))
