@@ -20,12 +20,14 @@ This project is mainly build for my personnal use and to learn Rust (+Iced).
  - [ ] Function splitting.
  - [ ] Improve the indexing logic on async work...
  - [ ] Write test for a more robust code.
- - [ ] Handling file rewrite.
- - [ ] Don't import twice documents
+ - [ ] Handling file rewrite :warning:.
+ - [ ] Don't import twice documents + check if it's a file.
  - [ ] One file drag and drop (single file only maybe a batch also) mode (will be default)
 
 #### UI 
 
  - [x] Ability to see the size of the document compressed.
+ - [x] Add lucid icons.
+ - [ ] Change UI scale.
  - [ ] Drag and drop features.
  - [ ] UI, Simply build a beautifull and rich UI.
