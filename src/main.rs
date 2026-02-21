@@ -2,10 +2,15 @@
 // This version is really just to test iced and rust and understand
 //  all I need to properly build the app, I know it's quite ugly...
 
-mod utils;
+mod quality;
+mod file_entry;
+mod compression;
+mod dialog;
 
 use std::path::PathBuf;
-use std::{fmt, fs};
+use std::fs;
+
+use quality::Quality;
 
 use lucide_icons::LUCIDE_FONT_BYTES;
 
@@ -13,47 +18,13 @@ use iced::Alignment::Center;
 use iced::widget::{
     Column, button, column, container, pick_list, progress_bar, row, scrollable, space, text,
 };
-use iced::{Color, Element, Fill, Padding, Task, Theme};
-
-/// All available quality presets.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Quality {
-    Low,    // Screen
-    Middle, // Ebook
-    Good,   // Printer
-    High,   // Prepress
-}
-
-impl Quality {
-    /// All available quality presets.
-    pub const ALL: &'static [Self] = &[Self::Low, Self::Middle, Self::Good, Self::High];
-
-    fn as_gs_pdfsettings(&self) -> String {
-        match self {
-            Quality::Low => String::from("screen"),
-            Quality::Middle => String::from("ebook"),
-            Quality::Good => String::from("printer"),
-            Quality::High => String::from("prepress"),
-        }
-    }
-}
-
-impl fmt::Display for Quality {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Quality::Low => write!(f, "Low"),
-            Quality::Middle => write!(f, "Middle"),
-            Quality::Good => write!(f, "Good"),
-            Quality::High => write!(f, "High"),
-        }
-    }
-}
+use iced::{Element, Fill, Padding, Task, Theme};
 
 #[derive(Debug)]
 struct App {
     theme: Theme,                 // theme selection
     running: bool,                // with progress bar
-    files: Vec<utils::FileEntry>, // the list of file to compress
+    files: Vec<file_entry::FileEntry>, // the list of file to compress
     output_folder: PathBuf,       // the folder where the compressed file should land...
     quality: Quality,             // a preset that chose the compression percentage
     compress_size: u32,           // a slide chosing the size output
@@ -75,14 +46,14 @@ impl Default for App {
 #[derive(Debug, Clone)]
 enum Message {
     Start,
-    AddFiles(Vec<utils::FileEntry>),
+    AddFiles(Vec<file_entry::FileEntry>),
     AddOutputFolder(PathBuf),
     RemoveFile(usize),
     FileCompressed(usize),
     OpenDialog,
     SelectOutputFolder,
     SelectTheme(Theme),
-    SelectQuality(Quality),
+    SelectQuality(quality::Quality),
     SetSize(u32),
 }
 
@@ -90,10 +61,10 @@ impl App {
     // ─── Update Mecanic ───
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::OpenDialog => Task::perform(utils::open_file_selection(), Message::AddFiles),
+            Message::OpenDialog => Task::perform(dialog::open_file_selection(), Message::AddFiles),
 
             Message::SelectOutputFolder => {
-                Task::perform(utils::select_output_folder(), Message::AddOutputFolder)
+                Task::perform(dialog::select_output_folder(), Message::AddOutputFolder)
             }
 
             Message::AddFiles(files) => {
@@ -132,7 +103,7 @@ impl App {
                 if let Some(file) = self.files.first() {
                     let path = file.path.clone();
                     Task::perform(
-                        utils::compress_pdf(
+                        compression::compress_pdf(
                             path,
                             0,
                             self.quality.as_gs_pdfsettings(),
@@ -147,7 +118,7 @@ impl App {
 
             Message::FileCompressed(index) => {
                 // chaining logic
-                let output_file = utils::format_output_file(
+                let output_file = compression::format_output_file(
                     &self.files[index].path,
                     &self.output_folder,
                     &self.quality.as_gs_pdfsettings(),
@@ -166,7 +137,7 @@ impl App {
                 if next < self.files.len() {
                     let path = self.files[next].path.clone();
                     Task::perform(
-                        utils::compress_pdf(
+                        compression::compress_pdf(
                             path,
                             next,
                             self.quality.as_gs_pdfsettings(),
@@ -185,7 +156,8 @@ impl App {
     fn view_header(&self) -> Element<'_, Message> {
         let app_title = text("DocPress").size(25);
         let theme_list = pick_list(Theme::ALL, Some(&self.theme), Message::SelectTheme);
-        let quality_list = pick_list(Quality::ALL, Some(&self.quality), Message::SelectQuality);
+        let presets_txt = text("Presets: ");
+        let quality_list = pick_list(quality::Quality::ALL, Some(&self.quality), Message::SelectQuality);
 
         let add_document_btn_filed = row![lucide_icons::iced::icon_plus(), text("Add documents"),].spacing(5);
         let output_folder_btn_field = row![lucide_icons::iced::icon_folder_plus(), text("Select Output Folder"),].spacing(5);
@@ -202,7 +174,7 @@ impl App {
 
         column![
             row![app_title, theme_list,].spacing(25).align_y(Center),
-            row![quality_list, space().width(Fill), mangae_files_btn,]
+            row![presets_txt, quality_list, space().width(Fill), mangae_files_btn,]
                 .spacing(25)
                 .align_y(Center),
             // TODO add a slider. to select the output size...
@@ -281,27 +253,34 @@ impl App {
     }
 }
 
-impl utils::FileEntry {
+impl file_entry::FileEntry {
     fn view(&self, index: usize, running: bool) -> Element<'_, Message> {
+
+        let document_icon = lucide_icons::iced::icon_file_text().size(25);
+        let file_name     = text(self.get_file_name(50));
+        let file_size     = text(file_entry::format_size(self.size)).style(text::base);
+
+        let delete_btn = if running {
+            row![button(lucide_icons::iced::icon_x()),].align_y(Center)
+        } else {
+            row![button(lucide_icons::iced::icon_x()).on_press(Message::RemoveFile(index)),].align_y(Center)
+        };
+
+        let finish_btn = row![
+            text(file_entry::format_size(self.compressed_size)).style(text::success),
+            button(lucide_icons::iced::icon_check()),
+        ].align_y(Center).spacing(25);
+
         let content = container(
             row![
-                lucide_icons::iced::icon_file_text(),
-                text(self.path.file_name().unwrap().display().to_string()),
-                text(utils::format_size(self.size)).style(text::base),
+                document_icon,
+                file_name,
+                file_size,
                 space().width(Fill),
                 if self.compressed {
-                    row![
-                        text(utils::format_size(self.compressed_size)).style(text::success),
-                        button(lucide_icons::iced::icon_check()),
-                    ]
-                    .align_y(Center)
-                    .spacing(25)
+                    finish_btn
                 } else {
-                    if running {
-                        row![button(lucide_icons::iced::icon_x()),].align_y(Center)
-                    } else {
-                        row![button(lucide_icons::iced::icon_x()).on_press(Message::RemoveFile(index)),].align_y(Center)
-                    }
+                    delete_btn
                 }
             ]
             .spacing(10)
@@ -310,7 +289,7 @@ impl utils::FileEntry {
         )
         .style(|theme| {
             let sec = container::secondary(theme);
-            sec // TODO change opacity 
+            sec // TODO change opacity
         });
 
         container(content)
