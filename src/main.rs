@@ -28,6 +28,7 @@ struct App {
     output_folder: PathBuf,       // the folder where the compressed file should land...
     quality: Quality,             // a preset that chose the compression percentage
     compress_size: u32,           // a slide chosing the size output
+    ghostscript_found: bool,      // ghostscript detection at startup
 }
 
 impl Default for App {
@@ -39,6 +40,7 @@ impl Default for App {
             output_folder: PathBuf::new(),
             quality: Quality::Middle,
             compress_size: 5,
+            ghostscript_found: compression::is_ghostscript_installed(),
         }
     }
 }
@@ -55,6 +57,7 @@ enum Message {
     SelectTheme(Theme),
     SelectQuality(quality::Quality),
     SetSize(u32),
+    OpenGhostscriptLink,
 }
 
 impl App {
@@ -94,6 +97,11 @@ impl App {
 
             Message::SetSize(size) => {
                 self.compress_size = size;
+                Task::none()
+            }
+
+            Message::OpenGhostscriptLink => {
+                let _ = open::that("https://www.ghostscript.com/releases/gsdnld.html");
                 Task::none()
             }
 
@@ -230,6 +238,28 @@ impl App {
         .into()
     }
 
+    // ─── Ghostscript Warning ───
+    fn view_ghostscript_warning(&self) -> Element<'_, Message> {
+        let warning_icon = lucide_icons::iced::icon_triangle_alert().size(25);
+        let warning_text = text("Ghostscript not found! Compression requires Ghostscript.");
+        let install_btn = button(
+            row![lucide_icons::iced::icon_external_link(), text("Install Ghostscript"),].spacing(5)
+            
+        ).on_press(Message::OpenGhostscriptLink);
+
+        container(
+            row![warning_icon, warning_text, space().width(Fill), install_btn,]
+                .spacing(10)
+                .align_y(Center)
+                .padding(10),
+        )
+        .style(|theme| {
+            let sec = container::secondary(theme);
+            sec
+        })
+        .into()
+    }
+
     // ─── View... less fun ───
     fn view(&self) -> Element<'_, Message> {
         let files_compressed = self.files.iter().filter(|f| f.compressed).count() as f32;
@@ -243,13 +273,17 @@ impl App {
 
         let files_list = Column::with_children(vec_files);
 
-        column![
-            self.view_header(),
-            scrollable(files_list).height(Fill),
-            self.view_footer(files_compressed),
-        ]
-        .padding(25)
-        .into()
+        let mut layout = column![self.view_header(),];
+
+        if !self.ghostscript_found {
+            layout = layout.push(self.view_ghostscript_warning());
+        }
+
+        layout
+            .push(scrollable(files_list).height(Fill))
+            .push(self.view_footer(files_compressed))
+            .padding(25)
+            .into()
     }
 }
 

@@ -23,7 +23,7 @@ This project is mainly build for my personnal use and to learn Rust (+Iced).
 #### Code
 
  - [x] Split file and responsability into different one.
- - [ ] Handling Ghostscript not found or any error status.
+ - [x] Handling Ghostscript not found NOT Implemented (or any error status).
  - [x] Function splitting.
  - [ ] Improve the indexing logic on async work...
  - [ ] Write test for a more robust code.

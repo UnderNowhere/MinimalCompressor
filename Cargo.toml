@@ -8,6 +8,7 @@ iced = { version = "0.14.0", features = ["tokio"] }
 lucide-icons = {version = "0.575.0", features = ["iced"]}
 rfd = "0.17.1"
 tokio = { version = "1", features = ["rt", "macros", "time", "process"] }
+open = "5.3.3"
 
 [profile.dev]
 opt-level = 1

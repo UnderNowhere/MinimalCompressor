@@ -1,6 +1,15 @@
 use std::path::PathBuf;
 use tokio::process::Command;
 
+pub fn is_ghostscript_installed() -> bool {
+    // Simply checking the version
+    std::process::Command::new("gs")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 pub fn format_output_file(path: &PathBuf, output_path:&PathBuf, quality_parm: &String) -> PathBuf {
     output_path.join(
         format!(
