@@ -1,7 +1,12 @@
-# DocPress (no name really found from now)
+# DocPress
+
 A minimalist GUI cross plateform to compress documents using Ghostscript in Rust with Iced v0.14.
 
-![In app screenshot](doc/App.png)
+Title: (no name really found from now)
+
+<p align="center">
+    <img src="doc/App.png" alt="In app screenshot" width="500"/>
+</p>
 
 ### Warning
 
@@ -33,3 +38,11 @@ This project is mainly build for my personnal use and to learn Rust (+Iced).
  - [ ] Change UI scale.
  - [ ] Drag and drop features.
  - [ ] UI, Simply build a beautifull and rich UI.
+
+---
+
+<p align="center">
+    <a href="https://github.com/iced-rs/iced">
+    <img src="https://gist.githubusercontent.com/hecrj/ad7ecd38f6e47ff3688a38c79fd108f0/raw/74384875ecbad02ae2a926425e9bcafd0695bade/color.svg" width="200px">
+    </a>
+</p>
